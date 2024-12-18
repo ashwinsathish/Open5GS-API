@@ -1,6 +1,6 @@
 # Open5GS API
 
-This package provides a Python API for interacting with Open5GS components and managing PCF configurations.
+This package provides a Python API for interacting with Open5GS and UERANSIM components.
 
 ## Usage
 
