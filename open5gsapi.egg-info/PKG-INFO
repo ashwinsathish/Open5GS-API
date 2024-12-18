@@ -1,3 +1,20 @@
+Metadata-Version: 2.1
+Name: open5gsapi
+Version: 0.15.2
+Summary: A Python API for interacting with Open5GS components
+Home-page: https://github.com/ashwinsathish/open5gsapi
+Author: Ashwin
+Author-email: f20200893@pilani.bits-pilani.ac.in
+License: UNKNOWN
+Platform: UNKNOWN
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3.9
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+
 # Open5GS API
 
 This package provides a Python API for interacting with Open5GS components and managing PCF configurations.
@@ -511,3 +528,4 @@ except Exception as e:
 ```
 
 Metrics are collected with microsecond precision using monotonic time to ensure accurate measurements.
+

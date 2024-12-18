@@ -1,0 +1,287 @@
+
+class Open5GS:
+    _instance = None
+    _update_pcf_complete = False
+    _update_config_complete = False
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(Open5GS, cls).__new__(cls)
+            cls._instance._initialize()
+        return cls._instance
+
+    def _initialize(self):
+        self.policy = Policy()
+        self.ue_base_url = "http://10.10.0.132:8080"
+        self.upf_base_url = "http://10.10.0.112:8081"
+        self.env_path = None
+        self._env_config = None
+        self._last_env_modified_time = None
+        self.tunnel_handler = TunnelHandler(upf_ip="10.45.0.1", upf_port=5005)
+        self.tunnel_handler.start()
+        logger.info("TunnelHandler initialized and started")
+
+    def set_config_path(self, config_path: str):
+        self.policy.set_config_path(config_path)
+
+    def reload_config(self):
+        self.policy._ensure_config_loaded(force_reload=True)
+
+    def set_env_path(self, env_path: str):
+        """Set the path to the .env file and load it"""
+        if not os.path.exists(env_path):
+            raise ConfigurationError(f"Environment file not found: {env_path}")
+        self.env_path = env_path
+        self._ensure_env_loaded()
+
+    def _ensure_env_loaded(self, force_reload: bool = False):
+        """Ensure the environment file is loaded and up to date"""
+        if not self.env_path:
+            raise ConfigurationError("Environment file path not set")
+        
+        current_modified_time = os.path.getmtime(self.env_path)
+        if (force_reload or self._env_config is None or 
+            current_modified_time != self._last_env_modified_time):
+            self._env_config = self._read_env_file()
+            self._last_env_modified_time = current_modified_time
+
+    def _read_env_file(self) -> Dict[str, str]:
+        """Read and parse the .env file"""
+        env_config = {}
+        try:
+            with open(self.env_path, 'r') as file:
+                for line in file:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        try:
+                            key, value = line.split('=', 1)
+                            env_config[key.strip()] = value.strip()
+                        except ValueError:
+                            continue
+            return env_config
+        except Exception as e:
+            raise ConfigurationError(f"Failed to read environment file: {str(e)}")
+
+    def _write_env_file(self):
+        try:
+            with open(self.env_path, 'w') as file:
+                for key, value in self._env_config.items():
+                    file.write(f"{key}={value}\n")
+        except Exception as e:
+            raise ConfigurationError(f"Failed to write environment file: {str(e)}")
+
+    def get_num_ues(self) -> int:
+        self._ensure_env_loaded()
+        try:
+            return int(self._env_config.get('NUM_UES', 1))
+        except ValueError:
+            logger.warning("Invalid NUM_UES value in .env file, defaulting to 1")
+            return 1
+
+    def set_num_ues(self, num_ues: int):
+        if self._update_config_complete:
+            raise ConfigurationError(
+                "Cannot modify NUM_UES after update_config() has been called. "
+                "Please set NUM_UES before calling update_config()."
+            )
+
+        if not isinstance(num_ues, int) or num_ues < 1:
+            raise ValueError("Number of UEs must be a positive integer")
+
+        self._ensure_env_loaded()
+        self._env_config['NUM_UES'] = str(num_ues)
+        self._write_env_file()
+        logger.info(f"Updated NUM_UES to {num_ues}")
+
+    def reload_env(self):
+        if not self.env_path:
+            raise ConfigurationError("Environment file path not set")
+        self._ensure_env_loaded(force_reload=True)
+        logger.info("Environment configuration reloaded successfully")
+
+    def reload_env_config(self):
+        self.reload_env()
+
+    def ue(self, endpoint: str) -> str:
+        return urljoin(self.ue_base_url, endpoint)
+
+    def upf(self, endpoint: str) -> str:
+        return urljoin(self.upf_base_url, endpoint)
+
+    def _check_tunnel_status(self) -> Tuple[bool, Optional[str]]:
+        """Check if tunnel interfaces are properly set up"""
+        try:
+            result = subprocess.run(
+                ["docker", "exec", "ue", "python3", "-c", "import netifaces; print(len([i for i in netifaces.interfaces() if i.startswith('uesimtun')]))"],
+                capture_output=True,
+                text=True
+            )
+            
+            if result.stdout.strip() == "0":
+                return False, "No TUN interfaces found"
+            return True, None
+            
+        except Exception as e:
+            return False, f"Error checking tunnel interfaces: {str(e)}"
+
+    def is_tunnel_ready(self) -> bool:
+        """Check if tunnel communication is ready"""
+        tunnel_status, error = self._check_tunnel_status()
+        if not tunnel_status:
+            logger.error(f"Tunnel not ready: {error}")
+            return False
+        return True
+
+    def _parse_endpoint_type(self, endpoint: str) -> str:
+        """Determine the type of data based on the endpoint"""
+        if 'sensor' in endpoint:
+            return 'sensor'
+        elif 'stream' in endpoint or 'video' in endpoint:
+            return 'stream'
+        return 'default'
+
+    def send_data(self, url: str, data: Dict[str, Any], port_offset: int = 0) -> Dict[str, Any]:
+        """Send data through the tunnel"""
+        try:
+            is_ue_endpoint = self.ue_base_url in url
+            
+            # Add the data type based on the URL
+            parsed_url = urlparse(url)
+            endpoint_type = self._parse_endpoint_type(parsed_url.path)
+            if isinstance(data, dict) and 'type' not in data:
+                data['type'] = endpoint_type
+
+            # Determine target details
+            if is_ue_endpoint:
+                target_ip = "10.45.0.1"  # UPF IP
+                target_port = 5005       # UPF port
+            else:
+                parsed_url = urlparse(url)
+                host_parts = parsed_url.netloc.split(':')
+                target_ip = host_parts[0]
+                target_port = int(host_parts[1]) if len(host_parts) > 1 else 80
+
+            # Send through tunnel
+            success = self.tunnel_handler.send_data(data, target_ip, target_port)
+            
+            if success:
+                return {"status": "success", "message": "Data sent successfully"}
+            else:
+                raise CommunicationError("Failed to send data through tunnel", endpoint=url)
+
+        except Exception as e:
+            logger.error(f"Error sending data: {str(e)}")
+            raise CommunicationError(f"Error sending data: {str(e)}", endpoint=url)
+
+    def receive_data(self, endpoint: str) -> Optional[Dict[str, Any]]:
+        """Receive data from the tunnel"""
+        try:
+            data_type = self._parse_endpoint_type(endpoint)
+            result = self.tunnel_handler.receive_data(data_type)
+            
+            if result is None:
+                return None
+                
+            data, source_ip = result
+            
+            try:
+                if isinstance(data, bytes):
+                    json_data = json.loads(data.decode())
+                else:
+                    json_data = data
+                    
+                if isinstance(json_data, dict):
+                    json_data.update({
+                        "source_ip": source_ip,
+                        "timestamp": time.time(),
+                        "endpoint": endpoint
+                    })
+                return json_data
+                
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                return {
+                    "data": data,
+                    "source_ip": source_ip,
+                    "timestamp": time.time(),
+                    "endpoint": endpoint
+                }
+                
+        except Exception as e:
+            logger.error(f"Error receiving data: {str(e)}")
+            raise CommunicationError(f"Error receiving data: {str(e)}", endpoint=endpoint)
+
+    def list_sessions(self) -> List[str]:
+        return self.policy.list_sessions()
+
+    def rename_session(self, old_name: str, new_name: str):
+        self.policy.rename_session(old_name, new_name)
+
+    def get_session_details(self, name: str) -> Dict[str, Any]:
+        return self.policy.get_session_details(name)
+
+    def update_pcf(self):
+        self.policy.update_config()
+        self._update_pcf_complete = True
+        logger.info("PCF YAML file updated successfully")
+
+    def update_config(self):
+        if not self.env_path:
+            logger.warning("Environment file path not set. NUM_UES configuration may not be applied.")
+        
+        # Stop tunnel handler before restart
+        if hasattr(self, 'tunnel_handler'):
+            self.tunnel_handler.stop()
+        
+        self._restart_pcf_service()
+        
+        # Restart tunnel handler after service restart
+        self.tunnel_handler = TunnelHandler(upf_ip="10.45.0.1", upf_port=5005)
+        self.tunnel_handler.start()
+        
+        self._update_config_complete = True
+        logger.info("Configuration updated and tunnel handler restarted")
+
+    def _restart_pcf_service(self):
+        try:
+            result = subprocess.run(["docker", "ps", "-q"], capture_output=True, text=True)
+            if result.stdout.strip():
+                logger.info("Existing Docker containers found. Tearing down...")
+                subprocess.run(["docker", "compose", "down", "-t", "1", "-v"], check=True)
+            else:
+                logger.info("No running Docker containers found.")
+
+            logger.info("Bringing up Docker deployment...")
+            subprocess.run(["docker", "compose", "up", "-d"], check=True)
+            logger.info("PCF service restarted successfully")
+            
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to restart PCF service: {str(e)}")
+            raise ConfigurationError(f"Failed to restart PCF service: {str(e)}")
+
+    def is_update_pcf_complete(self) -> bool:
+        return self._update_pcf_complete
+
+    def is_update_config_complete(self) -> bool:
+        return self._update_config_complete
+
+    def is_run_background_nodes_complete(self) -> bool:
+        """Now checks if tunnel communication is ready"""
+        return self.is_tunnel_ready()
+
+    def get_background_process_status(self) -> Dict[str, Any]:
+        """Returns tunnel status instead of API status"""
+        tunnel_ready, error = self._check_tunnel_status()
+        return {
+            'completed': tunnel_ready,
+            'tunnel_ready': tunnel_ready,
+            'error_message': error if not tunnel_ready else None
+        }
+
+    def cleanup(self):
+        """Clean up resources"""
+        if hasattr(self, 'tunnel_handler'):
+            self.tunnel_handler.stop()
+            logger.info("TunnelHandler stopped")
+
+# Global instance
+open5gs = Open5GS()
