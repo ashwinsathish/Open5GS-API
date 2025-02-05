@@ -40,7 +40,7 @@ For detailed documentation, including:
 - Error Handling
 - Network Performance Monitoring
 
-Please visit the [Wiki](https://github.com/ashwinsathish/Open5GS-API/wiki)).
+Please visit the [Wiki](https://github.com/ashwinsathish/Open5GS-API/wiki).
 
 ## Requirements
 
