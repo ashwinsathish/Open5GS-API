@@ -2,6 +2,12 @@
 
 A Python API for interacting with Open5GS and UERANSIM components. This package provides comprehensive tools for managing UE configurations, network traffic analysis, and PCF configurations.
 
+## Installation
+
+```bash
+pip install open5gsapi
+```
+
 ## Features
 
 - UE Configuration Management
@@ -34,7 +40,7 @@ For detailed documentation, including:
 - Error Handling
 - Network Performance Monitoring
 
-Please visit our [Wiki](link-to-your-wiki).
+Please visit the [Wiki](https://github.com/ashwinsathish/Open5GS-API/wiki)).
 
 ## Requirements
 
@@ -42,13 +48,3 @@ Please visit our [Wiki](link-to-your-wiki).
 - Open5GS
 - UERANSIM
 - Wireshark (optional, for network analysis)
-
-## Installation
-
-```bash
-pip install open5gsapi
-```
-
-## Usage
-
-Pleas refer to the Wiki for details on internal functions
