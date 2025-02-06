@@ -33,14 +33,7 @@ response = open5gs.send_data(UE_API_URL, {"sensor_id": 1, "temperature": 25.5})
 
 ## Documentation
 
-For detailed documentation, including:
-- Complete API Reference
-- Usage Examples
-- Configuration Management
-- Error Handling
-- Network Performance Monitoring
-
-Please visit the [Wiki](https://github.com/ashwinsathish/Open5GS-API/wiki).
+For detailed documentation on complete API Reference, usage examples, configuration management, error handling, and network performance monitoring ... please visit the [Wiki](https://github.com/ashwinsathish/Open5GS-API/wiki).
 
 ## Requirements
 
