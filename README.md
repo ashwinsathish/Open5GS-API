@@ -1,6 +1,6 @@
 # Open5GS API
 
-A Python API for interacting with Open5GS and UERANSIM components. This package provides comprehensive tools for managing UE configurations, network traffic analysis, and PCF configurations.
+A REST API for interacting with Open5GS and UERANSIM components. This package provides comprehensive tools for managing UE configurations, network traffic analysis, and PCF configurations.
 
 ## Requirements
 
