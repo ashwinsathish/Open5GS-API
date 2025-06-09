@@ -44,4 +44,4 @@ For detailed documentation on complete API Reference, usage examples, configurat
 
 ## Thesis
 
-A project developed for bachelor's thesis - ``Conceptualization and Implementation of 5G Use-cases in a Virtual Network'' (Offenburg Univeristy of Applied Sciences, Dec 2024)
+A project developed for bachelor's thesis - "Conceptualization and Implementation of 5G Use-cases in a Virtual Network" (Offenburg Univeristy of Applied Sciences, Dec 2024)
